@@ -1,0 +1,3 @@
+REVOKE ALL ON FUNCTION public.mark_attendance(text, double precision, double precision, text) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.mark_attendance(text, double precision, double precision, text) TO authenticated;
+COMMENT ON FUNCTION public.mark_attendance(text, double precision, double precision, text) IS 'Intentional SECURITY DEFINER: validates QR token / 6-digit PIN, session status, geofence and duplicate sign-in, then records attendance for the calling authenticated user (auth.uid()). Callable only by authenticated role.';

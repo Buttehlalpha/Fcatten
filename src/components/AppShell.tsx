@@ -4,9 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { ReactNode } from "react";
 import { useProfile, type Role } from "@/hooks/useProfile";
 import { useQueryClient } from "@tanstack/react-query";
+import logo from "../assests/logo.png";
 
-// Import the logo from assets
-import logo from "@/assests/logo.png"; // or logo.svg, adjust path as needed
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, role } = useProfile();

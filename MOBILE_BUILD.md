@@ -53,7 +53,7 @@ This creates an `android/` folder — the real native Android project.
 Every time you pull new changes from Lovable:
 
 ```bash
-bun run build          # builds the web app into dist/
+bun run build   # builds the static app into dist/ (plain Vite SPA build)
 bunx cap sync android  # copies dist/ into the Android project
 ```
 

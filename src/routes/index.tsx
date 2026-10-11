@@ -108,7 +108,7 @@ function Landing() {
         </div>
       </header>
 
-      {/* HERO – full‑screen background carousel, text centered */}
+      {/* HERO – full‑screen background carousel */}
       <section className="relative h-screen w-full flex items-center justify-center overflow-hidden">
         {/* Carousel as background */}
         <div className="absolute inset-0">
@@ -225,7 +225,7 @@ function Landing() {
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer – using imported logo */}
       <footer className="bg-black text-white/80">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-12 sm:py-16">
           <div className="grid grid-cols-1 gap-8 sm:gap-10 md:grid-cols-4">

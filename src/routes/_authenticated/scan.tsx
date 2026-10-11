@@ -3,19 +3,31 @@ import { AppShell } from "@/components/AppShell";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ScanLine, CheckCircle2, AlertTriangle, Keyboard } from "lucide-react";
+import { ScanLine, CheckCircle2, AlertTriangle, Keyboard, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useSession } from "@/hooks/useSession";
 
 export const Route = createFileRoute("/_authenticated/scan")({
   component: ScanPage,
 });
 
+// Fallback UUID generator if crypto.randomUUID is not available
+function generateUUID() {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+}
+
 function deviceHash() {
   const key = "atbu-device-id";
   let id = localStorage.getItem(key);
   if (!id) {
-    id = crypto.randomUUID();
+    id = generateUUID();
     localStorage.setItem(key, id);
   }
   return id;
@@ -34,117 +46,39 @@ async function getCoords() {
 }
 
 function ScanPage() {
-  const { user } = useSession();
   const [status, setStatus] = useState<"idle" | "scanning" | "processing" | "success" | "error">("idle");
   const [message, setMessage] = useState<string>("");
-  const [token, setToken] = useState<string>("");
   const [detail, setDetail] = useState<{ code?: string; title?: string } | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  async function markAttendance(token: string) {
-    if (busy || status === "processing") return;
-    const t = token.trim();
-    if (!t) return;
-    
-    if (!user?.id) {
-      toast.error("You must be logged in to mark attendance");
-      return;
-    }
-
-    setToken(t);
-    setStatus("processing");
-    setBusy(true);
-    setMessage("Getting your location…");
-
-    try {
-      const { lat, lon } = await getCoords();
-      setMessage("Verifying session token…");
-
-      // First, find the session by looking up the token in session_tokens table
-      const { data: tokenData, error: tokenError } = await supabase
-        .from("session_tokens")
-        .select(`
-          session_id,
-          sessions (
-            id,
-            course_id,
-            courses (
-              code,
-              title
-            )
-          )
-        `)
-        .eq("token", t)
-        .maybeSingle();
-
-      if (tokenError) {
-        console.error("Token error:", tokenError);
-        throw new Error("Invalid QR code. Please try again.");
-      }
-
-      if (!tokenData) {
-        throw new Error("QR code not recognized. Please check and try again.");
-      }
-
-      const sessionData = tokenData.sessions;
-      if (!sessionData) {
-        throw new Error("Session not found for this QR code.");
-      }
-
-      setMessage("Recording attendance…");
-
-      // Check if already marked
-      const { data: existing, error: checkError } = await supabase
-        .from("attendance")
-        .select("id")
-        .eq("session_id", sessionData.id)
-        .eq("student_id", user.id)
-        .maybeSingle();
-
-      if (checkError) {
-        console.error("Check error:", checkError);
-      }
-
-      if (existing) {
-        throw new Error("You've already marked attendance for this session");
-      }
-
-      // Record attendance
-      const { error: attendError } = await supabase.from("attendance").insert({
-        session_id: sessionData.id,
-        student_id: user.id,
-        device_hash: deviceHash(),
-        latitude: lat,
-        longitude: lon,
-        marked_at: new Date().toISOString(),
-      });
-
-      if (attendError) {
-        console.error("Attendance error:", attendError);
-        throw new Error("Failed to record attendance: " + attendError.message);
-      }
-
-      setDetail({
-        code: sessionData.courses?.code || "N/A",
-        title: sessionData.courses?.title || "Unknown Course",
-      });
-      setStatus("success");
-      toast.success("Attendance recorded successfully!");
-    } catch (e: any) {
-      console.error("Mark attendance error:", e);
-      setStatus("error");
-      setMessage(e?.message ?? "Failed to record attendance.");
-      toast.error(e?.message ?? "Failed to record attendance");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function acceptToken(raw: string) {
-    if (busy || status === "processing") return;
+  async function acceptToken(raw: string) {
+    if (status === "processing") return;
     const t = raw.trim();
     if (!t) return;
-    markAttendance(t);
+    setStatus("processing");
+    setMessage("Getting your location…");
+    try {
+      const { lat, lon } = await getCoords();
+      setMessage("Recording attendance…");
+      
+      // Call the RPC function WITHOUT _student_id
+      const { data, error } = await supabase.rpc("mark_attendance", {
+        _token: t,
+        _lat: lat ?? 0,
+        _lon: lon ?? 0,
+        _device_hash: deviceHash(),
+      });
+      
+      if (error) throw new Error(error.message);
+      const res = (data ?? {}) as { code?: string; title?: string };
+      setDetail({ code: res.code, title: res.title });
+      setStatus("success");
+      toast.success("Attendance recorded!");
+    } catch (e: any) {
+      console.error("Attendance error:", e);
+      setStatus("error");
+      setMessage(e?.message ?? "Failed to record attendance.");
+      toast.error(e?.message ?? "Failed");
+    }
   }
 
   return (
@@ -152,7 +86,7 @@ function ScanPage() {
       <header className="mb-6">
         <h1 className="font-display text-3xl font-bold text-primary">Sign in to lecture</h1>
         <p className="text-sm text-muted-foreground">
-          Scan the QR code or type the 6-digit code to mark your attendance.
+          Scan the QR code on screen or type the 6-digit code your lecturer reads out.
         </p>
       </header>
 
@@ -172,7 +106,9 @@ function ScanPage() {
 
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-border" />
-              <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">or enter code</span>
+              <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                or enter code
+              </span>
               <div className="h-px flex-1 bg-border" />
             </div>
 
@@ -184,25 +120,16 @@ function ScanPage() {
           <div className="overflow-hidden rounded-3xl border bg-black">
             <div className="relative aspect-square">
               <Scanner
-                onScan={(res) => {
-                  if (res && res[0]?.rawValue) {
-                    acceptToken(res[0].rawValue);
-                  }
-                }}
-                onError={(err) => {
-                  console.error("Scanner error:", err);
-                }}
+                onScan={(res) => res[0]?.rawValue && acceptToken(res[0].rawValue)}
+                onError={() => {}}
                 constraints={{ facingMode: "environment" }}
-                styles={{ 
-                  container: { width: "100%", height: "100%" }, 
-                  video: { objectFit: "cover" } 
-                }}
+                styles={{ container: { width: "100%", height: "100%" }, video: { objectFit: "cover" } }}
               />
               <div className="pointer-events-none absolute inset-6 rounded-2xl border-4 border-gold animate-pulse-ring" />
             </div>
             <div className="p-4 text-center text-sm text-white">Scanning…</div>
             <button
-              onClick={() => { setStatus("idle"); setToken(""); }}
+              onClick={() => setStatus("idle")}
               className="w-full border-t border-white/10 p-3 text-sm text-white/70 hover:bg-white/5"
             >
               Cancel
@@ -211,12 +138,9 @@ function ScanPage() {
         )}
 
         {status === "processing" && (
-          <div className="rounded-3xl border bg-card p-8 text-center shadow-elev">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-primary/10">
-              <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            </div>
-            <h2 className="mt-4 font-display text-xl font-bold">Processing</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{message}</p>
+          <div className="rounded-3xl border bg-card p-10 text-center shadow-elev">
+            <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
+            <p className="mt-4 text-sm font-semibold">{message}</p>
           </div>
         )}
 
@@ -227,13 +151,15 @@ function ScanPage() {
             </div>
             <h2 className="mt-4 font-display text-2xl font-bold">You're marked present</h2>
             {detail && (
-              <div className="mt-2">
-                <p className="text-sm font-semibold text-primary">{detail.code}</p>
-                <p className="text-sm text-muted-foreground">{detail.title}</p>
-              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {detail.code} · {detail.title}
+              </p>
             )}
             <button
-              onClick={() => { setStatus("idle"); setDetail(null); setToken(""); }}
+              onClick={() => {
+                setStatus("idle");
+                setDetail(null);
+              }}
               className="mt-6 block w-full rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
             >
               Done
@@ -248,20 +174,12 @@ function ScanPage() {
             </div>
             <h2 className="mt-4 font-display text-xl font-bold">Couldn't record attendance</h2>
             <p className="mt-1 text-sm text-muted-foreground">{message}</p>
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => { setStatus("idle"); setToken(""); }}
-                className="flex-1 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-              >
-                Try again
-              </button>
-              <button
-                onClick={() => { setToken(""); setStatus("idle"); setMessage(""); }}
-                className="flex-1 rounded-full border px-5 py-2.5 text-sm font-semibold hover:bg-accent"
-              >
-                Start over
-              </button>
-            </div>
+            <button
+              onClick={() => setStatus("idle")}
+              className="mt-6 w-full rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              Try again
+            </button>
           </div>
         )}
       </div>
@@ -272,12 +190,11 @@ function ScanPage() {
 function PinEntry({ onSubmit }: { onSubmit: (pin: string) => void }) {
   const [pin, setPin] = useState("");
   const ok = /^\d{6}$/.test(pin);
-  
   return (
     <form
-      onSubmit={(e) => { 
-        e.preventDefault(); 
-        if (ok) onSubmit(pin); 
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (ok) onSubmit(pin);
       }}
       className="rounded-3xl border bg-card p-5 shadow-sm"
     >
@@ -298,7 +215,7 @@ function PinEntry({ onSubmit }: { onSubmit: (pin: string) => void }) {
       <button
         type="submit"
         disabled={!ok}
-        className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-elev transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-elev disabled:cursor-not-allowed disabled:opacity-40"
       >
         Sign me in
       </button>

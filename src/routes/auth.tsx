@@ -172,16 +172,26 @@ function AuthPage() {
   }, []);
 
   return (
-    <div className="grid min-h-dvh md:grid-cols-2">
-      {/* LEFT PANEL – only the hero image */}
+    <div className="min-h-dvh bg-background md:grid md:grid-cols-2">
+      {/* LEFT PANEL – Hero image (hidden on mobile, shows on desktop) */}
       <div
-        className="relative hidden overflow-hidden md:flex md:items-center md:justify-center bg-cover bg-center"
+        className="relative hidden md:flex md:items-center md:justify-center bg-cover bg-center"
         style={{ backgroundImage: `url(${hero1})` }}
       />
 
-      {/* RIGHT FORM – with centered logo at the top */}
-      <div className="flex items-center justify-center bg-background p-6">
+      {/* RIGHT FORM – with image at top on mobile */}
+      <div className="flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md">
+          {/* Mobile Hero Image - shows only on mobile */}
+          <div className="md:hidden relative w-full h-48 sm:h-56 rounded-2xl overflow-hidden mb-6 shadow-elev">
+            <img
+              src={hero1}
+              alt="FOCATTEN Hero"
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/30" />
+          </div>
+
           {/* LOGO – centered, with FOCATTEN text */}
           <div className="flex flex-col items-center mb-6">
             <Link
@@ -201,7 +211,7 @@ function AuthPage() {
 
           <ModeToggle mode={mode} setMode={handleModeChange} />
 
-          <h1 className="font-display text-3xl font-bold">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold">
             {mode === "signin" ? "Welcome back" : "Join the faculty"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

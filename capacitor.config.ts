@@ -3,8 +3,11 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const config: CapacitorConfig = {
   appId: "ng.edu.atbu.attenscan",
   appName: "ATBU AttenScan",
-  webDir: ".output/public",
+  webDir: "dist",
   server: {
+    // For live-reload against Lovable preview during dev, uncomment and use your preview URL:
+    // url: "https://id-preview--63287da1-859b-4d6c-9d0c-eee1c09c860d.lovable.app",
+    // cleartext: true,
     androidScheme: "https",
   },
   android: {

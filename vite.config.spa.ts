@@ -39,7 +39,10 @@ export default defineConfig({
       // TanStack Start's server entry specifier is only resolvable by the Start plugin.
       "#tanstack-start-entry": path.resolve(import.meta.dirname, "src/start.ts"),
       "#tanstack-router-entry": path.resolve(import.meta.dirname, "src/router.tsx"),
-
+      // Server-only runtime (AsyncLocalStorage etc.) must never reach the browser bundle.
+      "@tanstack/react-start/server": path.resolve(import.meta.dirname, "src/lib/spa-server-stub.ts"),
+      "node:async_hooks": path.resolve(import.meta.dirname, "src/lib/spa-async-hooks-stub.ts"),
+      async_hooks: path.resolve(import.meta.dirname, "src/lib/spa-async-hooks-stub.ts"),
     },
   },
   define: { "process.env": "{}" },
